@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:google_fonts/google_fonts.dart'; 
+import 'package:google_fonts/google_fonts.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/services.dart';
 
 const ColorFilter matrizSepia = ColorFilter.matrix([
   0.9, 0.1, 0.05, 0, 0,
@@ -11,32 +15,152 @@ const ColorFilter matrizSepia = ColorFilter.matrix([
   0,   0,   0,    1, 0,
 ]);
 
+/// Miniatura de video optimizada usando thumbnails estáticos
+/// en lugar de inicializar un VideoPlayerController completo.
+/// Reduce drásticamente el uso de memoria y CPU.
 class MiniaturaVideoAutomatica extends StatefulWidget {
   final String rutaVideo;
   final bool esLocal;
-  MiniaturaVideoAutomatica({Key? key, required this.rutaVideo, this.esLocal = false}) : super(key: key);
-  @override _MiniaturaVideoAutomaticaState createState() => _MiniaturaVideoAutomaticaState();
+  const MiniaturaVideoAutomatica({Key? key, required this.rutaVideo, this.esLocal = false}) : super(key: key);
+
+  @override
+  State<MiniaturaVideoAutomatica> createState() => _MiniaturaVideoAutomaticaState();
 }
+
 class _MiniaturaVideoAutomaticaState extends State<MiniaturaVideoAutomatica> {
-  late VideoPlayerController _controladorMiniatura;
-  @override void initState() {
+  Uint8List? _thumbnailData;
+  bool _cargando = true;
+  bool _error = false;
+
+  @override
+  void initState() {
     super.initState();
-    _controladorMiniatura = widget.esLocal 
-        ? (kIsWeb ? VideoPlayerController.networkUrl(Uri.parse(widget.rutaVideo)) : VideoPlayerController.file(File(widget.rutaVideo)))
-        : VideoPlayerController.asset(widget.rutaVideo);
-    _controladorMiniatura.initialize().then((_) { _controladorMiniatura.setVolume(0.0); if(mounted) setState(() {}); }).catchError((_) {});
+    _generarThumbnail();
   }
-  @override void dispose() { _controladorMiniatura.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) {
-    return _controladorMiniatura.value.isInitialized
-        ? Stack(
-            fit: StackFit.expand,
-            children: [
-              FittedBox(fit: BoxFit.cover, child: SizedBox(width: _controladorMiniatura.value.size.width, height: _controladorMiniatura.value.size.height, child: RepaintBoundary(child: Opacity(opacity: 0.99, child: VideoPlayer(_controladorMiniatura))))),
-              Center(child: Container(padding: EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle, border: Border.all(color: Color(0xFFB89A6A).withOpacity(0.6), width: 1.5), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: -2)]), child: Icon(Icons.play_arrow_rounded, color: Color(0xFF6B2A2A), size: 30)))
-            ],
-          )
-        : Container(color: Colors.black12, child: Center(child: CircularProgressIndicator(color: Color(0xFFB89A6A))));
+
+  Future<void> _generarThumbnail() async {
+    try {
+      String videoPath;
+
+      if (widget.esLocal) {
+        // Videos del usuario (archivos locales)
+        videoPath = widget.rutaVideo;
+      } else {
+        // Videos en assets - copiar a archivo temporal
+        videoPath = await _copiarAssetATemp(widget.rutaVideo);
+      }
+
+      final thumbnail = await VideoThumbnail.thumbnailData(
+        video: videoPath,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 300,
+        quality: 75,
+      );
+
+      if (mounted) {
+        setState(() {
+          _thumbnailData = thumbnail;
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = true;
+          _cargando = false;
+        });
+      }
+    }
+  }
+
+  /// Copia un asset de Flutter a un archivo temporal para poder procesarlo
+  Future<String> _copiarAssetATemp(String assetPath) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File('${tempDir.path}/${assetPath.hashCode}.mp4');
+
+    // Si ya existe, reusar
+    if (await tempFile.exists()) {
+      return tempFile.path;
+    }
+
+    // Copiar del bundle al archivo
+    final byteData = await rootBundle.load(assetPath);
+    await tempFile.writeAsBytes(byteData.buffer.asUint8List());
+    return tempFile.path;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_cargando) {
+      return Container(
+        color: Colors.black12,
+        child: const Center(
+          child: CircularProgressIndicator(color: Color(0xFFB89A6A)),
+        ),
+      );
+    }
+
+    if (_error || _thumbnailData == null) {
+      return _buildFallback();
+    }
+
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.memory(
+            _thumbnailData!,
+            fit: BoxFit.cover,
+            cacheWidth: 300,
+          ),
+          // Overlay sepia para consistencia visual
+          Container(
+            color: const Color(0xFF6B2A2A).withOpacity(0.1),
+          ),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFB89A6A).withOpacity(0.6),
+                  width: 1.5,
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: -2),
+                ],
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Color(0xFF6B2A2A),
+                size: 30,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallback() {
+    return Container(
+      color: Colors.black12,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF6B2A2A).withOpacity(0.8),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.videocam_rounded,
+            color: Color(0xFFB89A6A),
+            size: 30,
+          ),
+        ),
+      ),
+    );
   }
 }
 

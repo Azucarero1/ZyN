@@ -4,6 +4,7 @@ import '../core/estado_global.dart';
 import 'galeria_screen.dart'; 
 
 class PantallaCargaSplash extends StatefulWidget {
+  const PantallaCargaSplash({Key? key}) : super(key: key);
   @override
   _PantallaCargaSplashState createState() => _PantallaCargaSplashState();
 }
@@ -40,6 +41,9 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash> with SingleTi
     super.dispose();
   }
 
+  // CONSTANTES DE OPTIMIZACIÓN
+  static const int _imagenesAPrecargar = 9; // Solo las primeras 9 (3x3 grid visible)
+
   // AQUÍ ESTÁ LA LÓGICA DE CARGA REAL Y OPTIMIZACIÓN
   Future<void> _cargarAppReal() async {
     // 1. Iniciamos el llenado visual (como si fuera el progreso)
@@ -47,49 +51,56 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash> with SingleTi
 
     // 2. Cargamos el estado global (el tamaño de la interfaz)
     await EstadoGlobal.inicializar();
-    
+
     if (mounted) setState(() => _estadoCargaText = "Preparando texturas...");
-    
+
     // 3. Pre-cargamos la imagen de fondo texturizada (¡Tu diseño original!)
-    await precacheImage(AssetImage('assets/images/MainBackground.jpg'), context);
+    await precacheImage(const AssetImage('assets/images/MainBackground.jpg'), context);
 
     if (mounted) setState(() => _estadoCargaText = "Cargando recuerdos en caché...");
-    
-    // 4. Leemos la lista global y PRECARGAMOS TODAS LAS FOTOS
-    List<Future<void>> tareasDeCarga = [];
-    
-    for (var recuerdo in EstadoGlobal.misRecuerdos) {
+
+    // 4. PRECARGAMOS SOLO LAS PRIMERAS IMÁGENES VISIBLES (3x3 grid)
+    // El resto se cargarán con lazy loading en la galería
+    final tareasDeCarga = <Future<void>>[];
+    final recuerdos = EstadoGlobal.misRecuerdos;
+    final limite = recuerdos.length < _imagenesAPrecargar ? recuerdos.length : _imagenesAPrecargar;
+
+    for (var i = 0; i < limite; i++) {
+      final recuerdo = recuerdos[i];
       if (recuerdo["tipo"] == "foto") {
         // Reducimos las imágenes a 300px en la RAM para que la galería vuele
         tareasDeCarga.add(
-          precacheImage(ResizeImage(AssetImage(recuerdo["archivo"]!), width: 300), context)
+          precacheImage(
+            ResizeImage(AssetImage(recuerdo["archivo"]!), width: 300),
+            context
+          )
         );
       }
     }
 
-    // 5. EL SPLASH SCREEN SE CONGELA AQUÍ HASTA QUE TODO TERMINE DE CARGAR
+    // 5. Esperamos las tareas de precaching prioritarias
     try {
-      await Future.wait(tareasDeCarga);
+      await Future.wait(tareasDeCarga, eagerError: false);
     } catch (e) {
-      print("Error precargando algunos assets: $e");
+      debugPrint("Error precargando algunos assets: $e");
     }
 
     // 6. Si la carga terminó ANTES que la animación de 5s, aceleramos el final
     if (_controller.value < 0.9) {
-      _controller.animateTo(1.0, duration: Duration(milliseconds: 500));
-      await Future.delayed(Duration(milliseconds: 500));
+      _controller.animateTo(1.0, duration: const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 500));
     } else {
       // Si la carga tardó más de 5s, esperamos a que termine la animación
-      await Future.delayed(Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 200));
     }
 
-    // 7. Cuando todo está en la RAM y el corazón lleno, pasamos a la galería fluida
+    // 7. Cuando las imágenes prioritarias están listas y el corazón lleno, pasamos a la galería
     if (mounted) {
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          transitionDuration: Duration(milliseconds: 1200), // Transición más romántica
-          pageBuilder: (_, __, ___) => PantallaGaleriaVintage(),
+          transitionDuration: const Duration(milliseconds: 1200),
+          pageBuilder: (_, __, ___) => const PantallaGaleriaVintage(),
           transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
         ),
       );

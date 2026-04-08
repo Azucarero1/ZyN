@@ -5,22 +5,8 @@ class EstadoGlobal {
   // Controla el tamaño de la interfaz
   static final ValueNotifier<double> escalaApp = ValueNotifier<double>(1.0);
 
-  // LA LISTA MAESTRA: Ahora vive aquí para que el Splash Screen la pueda leer
-  static final List<Map<String, String>> misRecuerdos = [
-    {"tipo": "video", "archivo": "assets/images/video1.mp4"},
-    {"tipo": "foto", "archivo": "assets/images/foto1.jpg"},
-    {"tipo": "foto", "archivo": "assets/images/foto2.jpg"},
-    {"tipo": "foto", "archivo": "assets/images/foto3.jpg"},
-    {"tipo": "video", "archivo": "assets/images/video2.mp4"},
-    {"tipo": "foto", "archivo": "assets/images/foto4.jpg"},
-    {"tipo": "foto", "archivo": "assets/images/foto5.jpg"},
-    {"tipo": "video", "archivo": "assets/images/video3.mp4"},
-    {"tipo": "foto", "archivo": "assets/images/foto6.jpg"},
-    {"tipo": "foto", "archivo": "assets/images/foto7.jpg"},
-    {"tipo": "foto", "archivo": "assets/images/foto8.jpg"},
-    {"tipo": "video", "archivo": "assets/images/video4.mp4"},
-    {"tipo": "foto", "archivo": "assets/images/foto10.jpg"}
-  ];
+  // LA LISTA MAESTRA: Inicia vacía, el usuario añade sus propios recuerdos
+  static final List<Map<String, String>> misRecuerdos = [];
 
   static Future<void> inicializar() async {
     final prefs = await SharedPreferences.getInstance();

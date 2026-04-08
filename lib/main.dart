@@ -12,10 +12,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // 2. Iniciamos la app con el Splash directamente
-  runApp(RegaloZairaApp());
+  runApp(const RegaloZairaApp());
 }
 
 class RegaloZairaApp extends StatelessWidget {
+  const RegaloZairaApp({Key? key}) : super(key: key);
+
   // Función que carga todo lo pesado
   Future<void> _prepararApp() async {
     await inicializarNotificaciones();
@@ -42,9 +44,9 @@ class RegaloZairaApp extends StatelessWidget {
             future: _prepararApp(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.done) {
-                return PantallaGaleriaVintage(); // Al terminar, va a la galería
+                return const PantallaGaleriaVintage(); // Al terminar, va a la galería
               }
-              return PantallaCargaSplash(); // Mientras carga, muestra el corazón
+              return const PantallaCargaSplash(); // Mientras carga, muestra el corazón
             },
           ),
         );

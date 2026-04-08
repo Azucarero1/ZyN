@@ -5,14 +5,46 @@ import 'dart:io';
 
 import '../widgets/widgets_video.dart'; 
 
-class PantallaDetalleAlbum extends StatelessWidget {
-  final List<Map<String, String>> recuerdos; 
-  final int indiceInicial; 
-  
-  PantallaDetalleAlbum({required this.recuerdos, required this.indiceInicial});
+class PantallaDetalleAlbum extends StatefulWidget {
+  final List<Map<String, String>> recuerdos;
+  final int indiceInicial;
+
+  const PantallaDetalleAlbum({Key? key, required this.recuerdos, required this.indiceInicial}) : super(key: key);
+
+  @override
+  State<PantallaDetalleAlbum> createState() => _PantallaDetalleAlbumState();
+}
+
+class _PantallaDetalleAlbumState extends State<PantallaDetalleAlbum>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final recuerdos = widget.recuerdos;
+    final indiceInicial = widget.indiceInicial;
+
     PageController controladorPaginas = PageController(initialPage: indiceInicial);
 
     return Scaffold(
@@ -20,9 +52,12 @@ class PantallaDetalleAlbum extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFFB89A6A)),
-          onPressed: () => Navigator.pop(context),
+        leading: FadeTransition(
+          opacity: _fadeAnimation,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFFB89A6A)),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
       ),
       extendBodyBehindAppBar: true, 
@@ -44,12 +79,15 @@ class PantallaDetalleAlbum extends StatelessWidget {
             itemCount: recuerdos.length,
             itemBuilder: (context, index) {
               final recuerdoActual = recuerdos[index];
-              final tagAnimacion = recuerdoActual["archivo"]! + index.toString();
+              final tagAnimacion = '${recuerdoActual["archivo"]}-$index';
               bool esVideo = recuerdoActual["tipo"] == "video" || recuerdoActual["tipo"] == "video_local";
 
-              return esVideo 
-                  ? _construirVistaVideo(context, recuerdoActual, tagAnimacion) 
-                  : _construirVistaFoto(context, recuerdoActual, tagAnimacion);
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: esVideo
+                    ? _construirVistaVideo(context, recuerdoActual, tagAnimacion)
+                    : _construirVistaFoto(context, recuerdoActual, tagAnimacion),
+              );
             },
           ),
         ),
@@ -136,11 +174,32 @@ class PantallaDetalleAlbum extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: 20),
-            Text(
-              "Para siempre...", 
-              style: GoogleFonts.greatVibes(fontSize: 38, color: Color(0xFFB89A6A), fontWeight: FontWeight.w500)
-            )
+            const SizedBox(height: 20),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 800),
+              builder: (context, value, child) => Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - value) * 20),
+                  child: Text(
+                    "Para siempre...",
+                    style: GoogleFonts.greatVibes(
+                      fontSize: 42,
+                      color: const Color(0xFFE8D4A8),
+                      fontWeight: FontWeight.w500,
+                      shadows: [
+                        Shadow(
+                          color: const Color(0xFF6B2A2A).withOpacity(0.5),
+                          blurRadius: 15,
+                          offset: const Offset(2, 3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

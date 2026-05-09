@@ -56,13 +56,17 @@ class _ReproductorViniloState extends State<ReproductorVinilo>
       duration: const Duration(milliseconds: 1400),
     )..repeat();
     // Brazo:
-    //  - REPOSO (0.0): brazo ligeramente inclinado a la derecha, sobre el
-    //    soporte (fuera del disco). Es el `begin`.
-    //  - REPRODUCIENDO (0.0 → -0.07 turns ≈ -25°): el brazo se inclina a la
-    //    izquierda y la aguja queda sobre los surcos del disco.
-    // El valor negativo equivale a un giro antihorario alrededor del
-    // pivote, que es el sentido natural en un tocadiscos visto desde arriba.
-    _brazoAnimacion = Tween<double>(begin: 0.04, end: -0.07).animate(
+    //  - REPOSO (begin = -0.06 turns ≈ -22°): el extremo inferior se inclina
+    //    a la DERECHA (fuera del disco, sobre el soporte de descanso).
+    //  - REPRODUCIENDO (end = +0.05 turns ≈ +18°): el extremo inferior se
+    //    inclina a la IZQUIERDA y la aguja queda sobre los surcos del disco.
+    //
+    // Importante: en Flutter `RotationTransition` con valores positivos rota
+    // en sentido HORARIO. Para una columna que parte apuntando hacia abajo,
+    // un giro horario mueve la base hacia la izquierda (de 6 → 7 → 8 en la
+    // metáfora del reloj). Por eso el reposo es negativo y el playing
+    // es positivo.
+    _brazoAnimacion = Tween<double>(begin: -0.06, end: 0.05).animate(
       CurvedAnimation(parent: _brazoController, curve: Curves.easeOutCubic),
     );
 

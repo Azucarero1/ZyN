@@ -1,227 +1,310 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../core/estado_global.dart';
-import 'galeria_screen.dart'; 
 
+import '../core/estado_global.dart';
+import '../core/notificaciones.dart';
+import '../core/theme.dart';
+import 'galeria_screen.dart';
+
+/// Pantalla inicial: muestra un corazón llenándose mientras la app
+/// inicializa el estado global, las notificaciones y precarga los assets
+/// más pesados (fondo + primeras miniaturas).
 class PantallaCargaSplash extends StatefulWidget {
-  const PantallaCargaSplash({Key? key}) : super(key: key);
+  const PantallaCargaSplash({super.key});
+
   @override
-  _PantallaCargaSplashState createState() => _PantallaCargaSplashState();
+  State<PantallaCargaSplash> createState() => _PantallaCargaSplashState();
 }
 
-class _PantallaCargaSplashState extends State<PantallaCargaSplash> with SingleTickerProviderStateMixin {
-  // Controlador de animación para el llenado del corazón
-  late AnimationController _controller;
-  late Animation<double> _animation;
-  String _estadoCargaText = "Iniciando...";
+class _PantallaCargaSplashState extends State<PantallaCargaSplash>
+    with SingleTickerProviderStateMixin {
+  static const Duration _duracionAnimacion = Duration(seconds: 4);
+  static const int _imagenesAPrecargar = 9;
+
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+  String _estado = 'Iniciando…';
 
   @override
   void initState() {
     super.initState();
-    
-    // Configuramos la animación (5 segundos para que se llene suavemente)
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 5), // Tiempo que tarda en llenarse
-    );
-    
-    // La animación va de 0.0 (vacío) a 1.0 (lleno)
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOutSine, // Llenado fluido y realista
-    ));
-
-    // Iniciamos la carga real y la animación al mismo tiempo
-    _cargarAppReal();
+    _controller = AnimationController(vsync: this, duration: _duracionAnimacion);
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine);
+    _controller.forward();
+    _arrancar();
   }
 
   @override
   void dispose() {
-    _controller.dispose(); // Limpieza de memoria
+    _controller.dispose();
     super.dispose();
   }
 
-  // CONSTANTES DE OPTIMIZACIÓN
-  static const int _imagenesAPrecargar = 9; // Solo las primeras 9 (3x3 grid visible)
+  void _setEstado(String mensaje) {
+    if (mounted) setState(() => _estado = mensaje);
+  }
 
-  // AQUÍ ESTÁ LA LÓGICA DE CARGA REAL Y OPTIMIZACIÓN
-  Future<void> _cargarAppReal() async {
-    // 1. Iniciamos el llenado visual (como si fuera el progreso)
-    _controller.forward();
-
-    // 2. Cargamos el estado global (el tamaño de la interfaz)
+  Future<void> _arrancar() async {
     await EstadoGlobal.inicializar();
+    _setEstado('Preparando notificaciones…');
+    await inicializarNotificaciones();
 
-    if (mounted) setState(() => _estadoCargaText = "Preparando texturas...");
+    if (!mounted) return;
+    _setEstado('Preparando texturas…');
+    // ignore: use_build_context_synchronously
+    await precacheImage(
+      const AssetImage('assets/images/MainBackground.jpg'),
+      context,
+    );
 
-    // 3. Pre-cargamos la imagen de fondo texturizada (¡Tu diseño original!)
-    await precacheImage(const AssetImage('assets/images/MainBackground.jpg'), context);
+    if (!mounted) return;
+    _setEstado('Cargando recuerdos…');
+    await _precargarMiniaturas();
 
-    if (mounted) setState(() => _estadoCargaText = "Cargando recuerdos en caché...");
+    // Saludo solo si la app ya tiene fecha configurada (evita ruido al primer arranque).
+    if (EstadoGlobal.fechaReencuentro != null) {
+      unawaited(enviarMensajeAleatorio());
+    }
 
-    // 4. PRECARGAMOS SOLO LAS PRIMERAS IMÁGENES VISIBLES (3x3 grid)
-    // El resto se cargarán con lazy loading en la galería
-    final tareasDeCarga = <Future<void>>[];
-    final recuerdos = EstadoGlobal.misRecuerdos;
-    final limite = recuerdos.length < _imagenesAPrecargar ? recuerdos.length : _imagenesAPrecargar;
+    // Si la animación aún no terminó, la aceleramos para no hacer esperar.
+    if (_controller.value < 1.0) {
+      await _controller.animateTo(1.0,
+          duration: const Duration(milliseconds: 400));
+    }
 
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 900),
+        pageBuilder: (_, __, ___) => const PantallaGaleriaVintage(),
+        transitionsBuilder: (_, animacion, __, child) =>
+            FadeTransition(opacity: animacion, child: child),
+      ),
+    );
+  }
+
+  Future<void> _precargarMiniaturas() async {
+    final recuerdos = EstadoGlobal.recuerdos.value;
+    if (recuerdos.isEmpty || !mounted) return;
+
+    final limite =
+        recuerdos.length < _imagenesAPrecargar ? recuerdos.length : _imagenesAPrecargar;
+    final tareas = <Future<void>>[];
     for (var i = 0; i < limite; i++) {
-      final recuerdo = recuerdos[i];
-      if (recuerdo["tipo"] == "foto") {
-        // Reducimos las imágenes a 300px en la RAM para que la galería vuele
-        tareasDeCarga.add(
-          precacheImage(
-            ResizeImage(AssetImage(recuerdo["archivo"]!), width: 300),
-            context
-          )
+      final r = recuerdos[i];
+      if (r.tipo == TipoMedio.fotoAsset) {
+        tareas.add(
+          // ignore: use_build_context_synchronously
+          precacheImage(ResizeImage(AssetImage(r.archivo), width: 300), context),
         );
       }
     }
-
-    // 5. Esperamos las tareas de precaching prioritarias
     try {
-      await Future.wait(tareasDeCarga, eagerError: false);
+      await Future.wait(tareas, eagerError: false);
     } catch (e) {
-      debugPrint("Error precargando algunos assets: $e");
-    }
-
-    // 6. Si la carga terminó ANTES que la animación de 5s, aceleramos el final
-    if (_controller.value < 0.9) {
-      _controller.animateTo(1.0, duration: const Duration(milliseconds: 500));
-      await Future.delayed(const Duration(milliseconds: 500));
-    } else {
-      // Si la carga tardó más de 5s, esperamos a que termine la animación
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
-
-    // 7. Cuando las imágenes prioritarias están listas y el corazón lleno, pasamos a la galería
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 1200),
-          pageBuilder: (_, __, ___) => const PantallaGaleriaVintage(),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
-        ),
-      );
+      debugPrint('Error precargando miniaturas: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Colores de ZyN
-    final Color cT = Color(0xFF6B2A2A); // Granate
-    final Color cB = Color(0xFFB89A6A); // Oro
-
     return Scaffold(
-      body: Container(
-        // VOLVEMOS A TU FONDO ORIGINAL TEXTURIZADO
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/MainBackground.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              SizedBox(height: 50),
-              // TU LOGO ORIGINAL DE ZyN (Granate y Cursivo)
-              Text(
-                'ZyN', 
-                style: GoogleFonts.greatVibes(fontSize: 80, fontWeight: FontWeight.bold, color: cT)
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Fondo de marmol vintage.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/images/MainBackground.jpg'),
+                fit: BoxFit.cover,
               ),
-              Spacer(),
-              
-              // EL CORAZÓN QUE SE LLENA DE FORMA REALISTA (Animado)
-              Center(
-                child: AnimatedBuilder(
-                  animation: _animation,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      size: Size(200, 200), // Tamaño del corazón
-                      painter: CorazonLlenandosePainter(
-                        progreso: _animation.value,
-                        colorRelleno: cT,
-                        colorBorde: cB,
+            ),
+          ),
+          // Sutil gradiente para mejorar legibilidad sobre el fondo.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.04),
+                  Colors.black.withOpacity(0.18),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                Text(
+                  'ZyN',
+                  style: GoogleFonts.greatVibes(
+                    fontSize: 88,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.granate,
+                    shadows: [
+                      Shadow(
+                        color: AppColors.oro.withOpacity(0.45),
+                        blurRadius: 14,
+                        offset: const Offset(2, 4),
                       ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
-              ),
-              
-              Spacer(),
-              
-              // Texto del estado de carga (En Oro y Cursivo, elegante)
-              Text(
-                _estadoCargaText, 
-                style: GoogleFonts.greatVibes(color: cB, fontSize: 24, fontStyle: FontStyle.italic, fontWeight: FontWeight.bold)
-              ),
-              SizedBox(height: 50),
-            ],
+                const SizedBox(height: 4),
+                // Filete decorativo bajo el logo.
+                Container(
+                  width: 110,
+                  height: 1.5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        AppColors.oro.withOpacity(0.7),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Center(
+                  child: AnimatedBuilder(
+                    animation: _animation,
+                    builder: (_, __) => CustomPaint(
+                      size: const Size(200, 200),
+                      painter: _CorazonLlenandosePainter(
+                        progreso: _animation.value,
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                // Estado de carga con transición suave entre mensajes.
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 320),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.25),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    _estado,
+                    key: ValueKey(_estado),
+                    style: GoogleFonts.greatVibes(
+                      color: AppColors.oro,
+                      fontSize: 26,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 6,
+                          offset: const Offset(1, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 44),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-// =========================================================
-// PAINTER PERSONALIZADO PARA EL CORAZÓN REALISTA
-// =========================================================
-class CorazonLlenandosePainter extends CustomPainter {
+/// Pinta el corazón con un nivel de "líquido" que sube según [progreso] (0..1).
+///
+/// Tres capas:
+///   1. Sombra suave para dar profundidad.
+///   2. Llenado granate con gradiente vertical (más claro arriba).
+///   3. Borde oro de doble grosor para el acento vintage.
+class _CorazonLlenandosePainter extends CustomPainter {
   final double progreso;
-  final Color colorRelleno;
-  final Color colorBorde;
 
-  CorazonLlenandosePainter({
-    required this.progreso,
-    required this.colorRelleno,
-    required this.colorBorde,
-  });
+  const _CorazonLlenandosePainter({required this.progreso});
+
+  Path _construirCorazon(double width, double height) {
+    return Path()
+      ..moveTo(0.5 * width, height * 0.35)
+      ..cubicTo(
+        0.2 * width, height * 0.1,
+        -0.25 * width, height * 0.6,
+        0.5 * width, height,
+      )
+      ..cubicTo(
+        1.25 * width, height * 0.6,
+        0.8 * width, height * 0.1,
+        0.5 * width, height * 0.35,
+      )
+      ..close();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Definimos el camino (path) del corazón
-    Path path = Path();
-    double width = size.width;
-    double height = size.height;
+    final width = size.width;
+    final height = size.height;
+    final path = _construirCorazon(width, height);
 
-    path.moveTo(0.5 * width, height * 0.35);
-    path.cubicTo(0.2 * width, height * 0.1, -0.25 * width, height * 0.6, 0.5 * width, height);
-    path.cubicTo(1.25 * width, height * 0.6, 0.8 * width, height * 0.1, 0.5 * width, height * 0.35);
-    path.close();
-
-    // 1. Dibujamos el contorno de oro
-    Paint paintBorde = Paint()
-      ..color = colorBorde
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0;
-    canvas.drawPath(path, paintBorde);
-
-    // 2. Creamos la máscara de llenado (líquido) granate
+    // 1. Sombra: eleva el corazón sobre el fondo de mármol.
     canvas.save();
-    canvas.clipPath(path); // Solo dibujamos DENTRO del corazón
-
-    // Definimos la altura del llenado
-    double topLlenado = height * (1.0 - progreso);
-
-    // Dibujamos el rectángulo de relleno (el líquido)
-    Paint paintRelleno = Paint()
-      ..color = colorRelleno
-      ..style = PaintingStyle.fill;
-    
-    // Pequeño truco para que parezca que el líquido se mueve
-    canvas.drawRect(
-      Rect.fromLTWH(0, topLlenado, width, height), 
-      paintRelleno
+    canvas.translate(2, 6);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.black.withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
+    canvas.restore();
 
-    canvas.restore(); // Restauramos el canvas original
+    // 2. Llenado: gradiente granate que sube según progreso.
+    canvas.save();
+    canvas.clipPath(path);
+    final topLlenado = height * (1.0 - progreso);
+    final rectoLleno = Rect.fromLTWH(0, topLlenado, width, height);
+    final paintRelleno = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFF8E3838),
+          AppColors.granate,
+          AppColors.granateOscuro,
+        ],
+      ).createShader(rectoLleno);
+    canvas.drawRect(rectoLleno, paintRelleno);
+    canvas.restore();
+
+    // 3. Borde dorado con doble trazo para acento vintage.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.oro.withOpacity(0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6.5,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.oro
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CorazonLlenandosePainter oldDelegate) {
-    return oldDelegate.progreso != progreso;
-  }
+  bool shouldRepaint(covariant _CorazonLlenandosePainter old) =>
+      old.progreso != progreso;
 }
+

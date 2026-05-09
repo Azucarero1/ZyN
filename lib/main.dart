@@ -7,6 +7,9 @@ import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Evita descargas de fuentes en runtime; usa solo las fuentes empaquetadas
+  // en assets/fonts/ para que la app funcione sin conexión a internet.
+  GoogleFonts.config.allowRuntimeFetching = false;
   runApp(const RegaloZynApp());
 }
 

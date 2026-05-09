@@ -13,10 +13,12 @@ import '../core/estado_global.dart';
 import '../core/notificaciones.dart';
 import '../core/theme.dart';
 import '../widgets/estado_vacio.dart';
+import '../widgets/petalos_animados.dart';
 import '../widgets/reproductor_vintage.dart';
 import '../widgets/sheet_configuracion.dart';
 import '../widgets/tarjeta_recuerdo.dart';
 import '../widgets/widgets_video.dart';
+import 'carta_screen.dart';
 import 'detalle_album_screen.dart';
 
 /// Lista de canciones empaquetadas como assets. El orden define la lista
@@ -330,46 +332,78 @@ class _PantallaGaleriaVintageState extends State<PantallaGaleriaVintage> {
     _reproducir(nuevo);
   }
 
+  void _abrirCarta() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (_, __, ___) => const PantallaCarta(),
+        transitionsBuilder: (_, animacion, __, child) => FadeTransition(
+          opacity: animacion,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+              CurvedAnimation(parent: animacion, curve: Curves.easeOut),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/MainBackground.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _Encabezado(
-                tiempoRestante: _tiempoRestante,
-                onAnadir: _anadirRecuerdo,
-                onConfigurar: _mostrarConfiguracion,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Fondo de mármol vintage.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/images/MainBackground.jpg'),
+                fit: BoxFit.cover,
               ),
-              const Expanded(child: _Galeria()),
-              ValueListenableBuilder<double>(
-                valueListenable: EstadoGlobal.escalaApp,
-                builder: (_, factor, __) => ReproductorRadioVintage(
-                  factorEscala: factor,
-                  indiceCancionNotifier: _indiceCancion,
-                  estaReproduciendoNotifier: _estaReproduciendo,
-                  modoAleatorioNotifier: _modoAleatorio,
-                  modoRepetirNotifier: _modoRepetir,
-                  miMusica: _miMusica,
-                  onPlayPause: _pausarOPlay,
-                  onNext: _siguienteCancion,
-                  onPrevious: _cancionAnterior,
-                  onToggleAleatorio: () =>
-                      _modoAleatorio.value = !_modoAleatorio.value,
-                  onToggleRepetir: () =>
-                      _modoRepetir.value = !_modoRepetir.value,
+            ),
+          ),
+          // Capa decorativa: pétalos cayendo en bucle infinito.
+          // Solo en la galería principal — no afecta a otras pantallas.
+          const Positioned.fill(
+            child: PetalosAnimados(densidad: 16),
+          ),
+          // Contenido principal.
+          SafeArea(
+            child: Column(
+              children: [
+                _Encabezado(
+                  tiempoRestante: _tiempoRestante,
+                  onAnadir: _anadirRecuerdo,
+                  onConfigurar: _mostrarConfiguracion,
+                  onAbrirCarta: _abrirCarta,
                 ),
-              ),
-            ],
+                const Expanded(child: _Galeria()),
+                ValueListenableBuilder<double>(
+                  valueListenable: EstadoGlobal.escalaApp,
+                  builder: (_, factor, __) => ReproductorRadioVintage(
+                    factorEscala: factor,
+                    indiceCancionNotifier: _indiceCancion,
+                    estaReproduciendoNotifier: _estaReproduciendo,
+                    modoAleatorioNotifier: _modoAleatorio,
+                    modoRepetirNotifier: _modoRepetir,
+                    miMusica: _miMusica,
+                    onPlayPause: _pausarOPlay,
+                    onNext: _siguienteCancion,
+                    onPrevious: _cancionAnterior,
+                    onToggleAleatorio: () =>
+                        _modoAleatorio.value = !_modoAleatorio.value,
+                    onToggleRepetir: () =>
+                        _modoRepetir.value = !_modoRepetir.value,
+                    reproductor: _reproductorGlobal,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -451,11 +485,13 @@ class _Encabezado extends StatelessWidget {
   final ValueNotifier<String> tiempoRestante;
   final VoidCallback onAnadir;
   final VoidCallback onConfigurar;
+  final VoidCallback onAbrirCarta;
 
   const _Encabezado({
     required this.tiempoRestante,
     required this.onAnadir,
     required this.onConfigurar,
+    required this.onAbrirCarta,
   });
 
   @override
@@ -562,10 +598,17 @@ class _Encabezado extends StatelessWidget {
             ),
           ),
           _BotonHeader(
+            icon: Icons.mail_outline_rounded,
+            onPressed: onAbrirCarta,
+            // Pulsa suavemente para invitar a abrir la carta.
+            pulsoSuave: true,
+          ),
+          const SizedBox(width: 6),
+          _BotonHeader(
             icon: Icons.add_a_photo_outlined,
             onPressed: onAnadir,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _BotonHeader(
             icon: Icons.settings_outlined,
             onPressed: onConfigurar,
@@ -576,18 +619,52 @@ class _Encabezado extends StatelessWidget {
   }
 }
 
-class _BotonHeader extends StatelessWidget {
+class _BotonHeader extends StatefulWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const _BotonHeader({required this.icon, required this.onPressed});
+  /// Si es true, el botón emite un pulso dorado suave en bucle para
+  /// invitar al usuario a tocarlo (útil para acciones especiales como
+  /// "abrir carta").
+  final bool pulsoSuave;
+
+  const _BotonHeader({
+    required this.icon,
+    required this.onPressed,
+    this.pulsoSuave = false,
+  });
+
+  @override
+  State<_BotonHeader> createState() => _BotonHeaderState();
+}
+
+class _BotonHeaderState extends State<_BotonHeader>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _pulso;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pulsoSuave) {
+      _pulso = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 2),
+      )..repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulso?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final boton = Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onPressed,
+        onTap: widget.onPressed,
         borderRadius: BorderRadius.circular(14),
         child: Ink(
           padding: const EdgeInsets.all(10),
@@ -603,9 +680,31 @@ class _BotonHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.oro.withOpacity(0.45)),
           ),
-          child: Icon(icon, color: AppColors.oroClaro, size: 24),
+          child: Icon(widget.icon, color: AppColors.oroClaro, size: 22),
         ),
       ),
+    );
+
+    if (_pulso == null) return boton;
+    // Capa de glow pulsante alrededor del botón.
+    return AnimatedBuilder(
+      animation: _pulso!,
+      builder: (_, __) {
+        final v = _pulso!.value; // 0..1
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.oro.withOpacity(0.15 + v * 0.35),
+                blurRadius: 8 + v * 14,
+                spreadRadius: -1,
+              ),
+            ],
+          ),
+          child: boton,
+        );
+      },
     );
   }
 }

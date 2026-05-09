@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -18,6 +19,7 @@ class ReproductorRadioVintage extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onToggleAleatorio;
   final VoidCallback onToggleRepetir;
+  final AudioPlayer reproductor;
 
   const ReproductorRadioVintage({
     super.key,
@@ -32,6 +34,7 @@ class ReproductorRadioVintage extends StatelessWidget {
     required this.onPrevious,
     required this.onToggleAleatorio,
     required this.onToggleRepetir,
+    required this.reproductor,
   });
 
   String _nombreCancion(String ruta) =>
@@ -50,6 +53,7 @@ class ReproductorRadioVintage extends StatelessWidget {
         onNext: onNext,
         onPrevious: onPrevious,
         miMusica: miMusica,
+        reproductor: reproductor,
       ),
     );
   }

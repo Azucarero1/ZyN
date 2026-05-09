@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -16,6 +19,9 @@ class ReproductorVinilo extends StatefulWidget {
   final VoidCallback onPrevious;
   final List<String> miMusica;
 
+  /// Reproductor real para escuchar posición/duración y permitir el seek.
+  final AudioPlayer reproductor;
+
   const ReproductorVinilo({
     super.key,
     required this.estaReproduciendoNotifier,
@@ -24,6 +30,7 @@ class ReproductorVinilo extends StatefulWidget {
     required this.onNext,
     required this.onPrevious,
     required this.miMusica,
+    required this.reproductor,
   });
 
   @override
@@ -37,9 +44,33 @@ class _ReproductorViniloState extends State<ReproductorVinilo>
   late final AnimationController _visualizerController;
   late final Animation<double> _brazoAnimacion;
 
+  // Notifiers locales para posición y duración. Suscritos a los streams
+  // del AudioPlayer; permiten que el slider y los timestamps se actualicen
+  // sin reconstruir todo el árbol del reproductor.
+  final ValueNotifier<Duration> _posicion = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _duracion = ValueNotifier(Duration.zero);
+  StreamSubscription<Duration>? _subPosicion;
+  StreamSubscription<Duration>? _subDuracion;
+  // Mientras el usuario arrastra el slider, ignoramos las actualizaciones
+  // automáticas para que el thumb no salte mientras está moviéndolo.
+  double? _arrastreSegundos;
+
   @override
   void initState() {
     super.initState();
+    _subPosicion = widget.reproductor.onPositionChanged.listen((p) {
+      _posicion.value = p;
+    });
+    _subDuracion = widget.reproductor.onDurationChanged.listen((d) {
+      _duracion.value = d;
+    });
+    // Tomamos los valores iniciales por si el reproductor ya viene cargado.
+    widget.reproductor.getCurrentPosition().then((p) {
+      if (mounted && p != null) _posicion.value = p;
+    });
+    widget.reproductor.getDuration().then((d) {
+      if (mounted && d != null) _duracion.value = d;
+    });
     // 33⅓ RPM real ≈ 1.8s por vuelta. Sentido horario (turns 0 → 1).
     _viniloController = AnimationController(
       vsync: this,
@@ -91,10 +122,20 @@ class _ReproductorViniloState extends State<ReproductorVinilo>
   @override
   void dispose() {
     widget.estaReproduciendoNotifier.removeListener(_onCambioReproduccion);
+    _subPosicion?.cancel();
+    _subDuracion?.cancel();
+    _posicion.dispose();
+    _duracion.dispose();
     _viniloController.dispose();
     _brazoController.dispose();
     _visualizerController.dispose();
     super.dispose();
+  }
+
+  String _formatear(Duration d) {
+    String dosDigitos(int n) => n.toString().padLeft(2, '0');
+    return '${dosDigitos(d.inMinutes.remainder(60))}:'
+        '${dosDigitos(d.inSeconds.remainder(60))}';
   }
 
   String _nombreLimpio(String ruta) =>
@@ -232,7 +273,21 @@ class _ReproductorViniloState extends State<ReproductorVinilo>
                 visualizerController: _visualizerController,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
+            // Barra de progreso de la pista con timestamps.
+            _BarraProgresoPista(
+              posicion: _posicion,
+              duracion: _duracion,
+              valorArrastre: () => _arrastreSegundos,
+              onArrastreInicio: (s) => setState(() => _arrastreSegundos = s),
+              onArrastreCambio: (s) => setState(() => _arrastreSegundos = s),
+              onArrastreFin: (s) {
+                widget.reproductor.seek(Duration(seconds: s.toInt()));
+                setState(() => _arrastreSegundos = null);
+              },
+              formatear: _formatear,
+            ),
+            const SizedBox(height: 14),
             ValueListenableBuilder<bool>(
               valueListenable: widget.estaReproduciendoNotifier,
               builder: (_, reproduciendo, __) => Row(
@@ -257,7 +312,7 @@ class _ReproductorViniloState extends State<ReproductorVinilo>
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
           ],
         ),
       ),
@@ -600,6 +655,105 @@ class _BotonPlayCentral extends StatelessWidget {
             color: const Color(0xFF4A1F1F),
             size: 40,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra de progreso de la pista (slider + timestamps actuales).
+///
+/// Usa los `ValueNotifier` de posición y duración del padre para que sólo
+/// el slider y los timestamps se reconstruyan cada segundo, no toda la
+/// pantalla del reproductor.
+class _BarraProgresoPista extends StatelessWidget {
+  final ValueListenable<Duration> posicion;
+  final ValueListenable<Duration> duracion;
+  final double? Function() valorArrastre;
+  final ValueChanged<double> onArrastreInicio;
+  final ValueChanged<double> onArrastreCambio;
+  final ValueChanged<double> onArrastreFin;
+  final String Function(Duration) formatear;
+
+  const _BarraProgresoPista({
+    required this.posicion,
+    required this.duracion,
+    required this.valorArrastre,
+    required this.onArrastreInicio,
+    required this.onArrastreCambio,
+    required this.onArrastreFin,
+    required this.formatear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: ValueListenableBuilder<Duration>(
+        valueListenable: posicion,
+        builder: (_, pos, __) => ValueListenableBuilder<Duration>(
+          valueListenable: duracion,
+          builder: (_, dur, __) {
+            final segTotal = dur.inSeconds.toDouble();
+            final segMax = segTotal > 0 ? segTotal : 1.0;
+            final segActual =
+                (valorArrastre() ?? pos.inSeconds.toDouble()).clamp(0.0, segMax);
+
+            return Column(
+              children: [
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: AppColors.oro,
+                    inactiveTrackColor: AppColors.oro.withOpacity(0.2),
+                    thumbColor: AppColors.oroClaro,
+                    overlayColor: AppColors.oro.withOpacity(0.18),
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
+                    trackShape: const RoundedRectSliderTrackShape(),
+                  ),
+                  child: Slider(
+                    min: 0,
+                    max: segMax,
+                    value: segActual,
+                    onChangeStart: onArrastreInicio,
+                    onChanged: onArrastreCambio,
+                    onChangeEnd: onArrastreFin,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        formatear(Duration(seconds: segActual.toInt())),
+                        style: GoogleFonts.cormorantGaramond(
+                          color: AppColors.oroClaro.withOpacity(0.85),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      Text(
+                        formatear(dur),
+                        style: GoogleFonts.cormorantGaramond(
+                          color: AppColors.oroClaro.withOpacity(0.55),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

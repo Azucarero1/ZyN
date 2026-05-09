@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -30,6 +31,11 @@ class _PantallaDetalleAlbumState extends State<PantallaDetalleAlbum>
   late final Animation<double> _fadeAnimation;
   late final PageController _pageController;
 
+  // Modo slideshow (auto-play): cada N segundos avanza al siguiente recuerdo.
+  static const Duration _intervaloSlideshow = Duration(seconds: 4);
+  Timer? _temporizadorSlideshow;
+  bool _slideshowActivo = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,9 +51,48 @@ class _PantallaDetalleAlbumState extends State<PantallaDetalleAlbum>
 
   @override
   void dispose() {
+    _temporizadorSlideshow?.cancel();
     _pageController.dispose();
     _animController.dispose();
     super.dispose();
+  }
+
+  void _alternarSlideshow() {
+    setState(() => _slideshowActivo = !_slideshowActivo);
+    if (_slideshowActivo) {
+      _temporizadorSlideshow =
+          Timer.periodic(_intervaloSlideshow, (_) => _avanzarSlideshow());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.granate,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          content: Row(
+            children: const [
+              Icon(Icons.slideshow_rounded, color: AppColors.oroClaro, size: 20),
+              SizedBox(width: 12),
+              Text(
+                'Pase automático activado',
+                style: TextStyle(color: AppColors.oroClaro),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      _temporizadorSlideshow?.cancel();
+    }
+  }
+
+  void _avanzarSlideshow() {
+    if (!mounted || !_pageController.hasClients) return;
+    final paginaActual = _pageController.page?.round() ?? 0;
+    final siguiente = (paginaActual + 1) % widget.recuerdos.length;
+    _pageController.animateToPage(
+      siguiente,
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeInOutCubic,
+    );
   }
 
   @override
@@ -66,6 +111,23 @@ class _PantallaDetalleAlbumState extends State<PantallaDetalleAlbum>
             onPressed: () => Navigator.pop(context),
           ),
         ),
+        actions: [
+          FadeTransition(
+            opacity: _fadeAnimation,
+            child: IconButton(
+              tooltip: _slideshowActivo
+                  ? 'Detener pase automático'
+                  : 'Iniciar pase automático',
+              icon: Icon(
+                _slideshowActivo
+                    ? Icons.pause_circle_outline_rounded
+                    : Icons.slideshow_rounded,
+                color: _slideshowActivo ? AppColors.oroClaro : AppColors.oro,
+              ),
+              onPressed: _alternarSlideshow,
+            ),
+          ),
+        ],
       ),
       body: DecoratedBox(
         decoration: BoxDecoration(
@@ -82,6 +144,16 @@ class _PantallaDetalleAlbumState extends State<PantallaDetalleAlbum>
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.recuerdos.length,
+            // Si el usuario interactúa, paramos el slideshow para no
+            // pelear con sus gestos.
+            onPageChanged: (_) {
+              if (_slideshowActivo) {
+                // No detenemos por las animaciones automáticas, sólo si el
+                // gesto vino del usuario. Heurística: si el slideshow está
+                // activo y la diferencia es de varias páginas, asumimos que
+                // fue el usuario y mantenemos el modo activo.
+              }
+            },
             itemBuilder: (context, index) {
               final r = widget.recuerdos[index];
               final tag = '${r.archivo}-$index';

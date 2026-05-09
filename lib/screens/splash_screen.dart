@@ -19,19 +19,62 @@ class PantallaCargaSplash extends StatefulWidget {
 }
 
 class _PantallaCargaSplashState extends State<PantallaCargaSplash>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const Duration _duracionAnimacion = Duration(seconds: 4);
   static const int _imagenesAPrecargar = 9;
 
   late final AnimationController _controller;
+  late final AnimationController _pulsoCorazon;
   late final Animation<double> _animation;
+  late final Animation<double> _animacionPulso;
   String _estado = 'Iniciando…';
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: _duracionAnimacion);
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine);
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutSine,
+    );
+
+    // Latido cardiaco: dos pulsos rápidos seguidos de una pausa.
+    // El TweenSequence emula la curva característica de un latido real.
+    _pulsoCorazon = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+    _animacionPulso = TweenSequence<double>([
+      // Primer impulso (sístole).
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.10).chain(
+          CurveTween(curve: Curves.easeOut),
+        ),
+        weight: 12,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.10, end: 0.97).chain(
+          CurveTween(curve: Curves.easeIn),
+        ),
+        weight: 14,
+      ),
+      // Segundo impulso (más suave).
+      TweenSequenceItem(
+        tween: Tween(begin: 0.97, end: 1.05).chain(
+          CurveTween(curve: Curves.easeOut),
+        ),
+        weight: 10,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.05, end: 1.0).chain(
+          CurveTween(curve: Curves.easeIn),
+        ),
+        weight: 14,
+      ),
+      // Pausa (diástole) — el corazón descansa.
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 50),
+    ]).animate(_pulsoCorazon);
+
     _controller.forward();
     _arrancar();
   }
@@ -39,6 +82,7 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash>
   @override
   void dispose() {
     _controller.dispose();
+    _pulsoCorazon.dispose();
     super.dispose();
   }
 
@@ -172,12 +216,17 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash>
                 ),
                 const Spacer(),
                 Center(
+                  // El corazón se llena con la animación de carga Y palpita
+                  // con su propio ritmo cardíaco (dos pulsos + pausa).
                   child: AnimatedBuilder(
-                    animation: _animation,
-                    builder: (_, __) => CustomPaint(
-                      size: const Size(200, 200),
-                      painter: _CorazonLlenandosePainter(
-                        progreso: _animation.value,
+                    animation: Listenable.merge([_animation, _animacionPulso]),
+                    builder: (_, __) => Transform.scale(
+                      scale: _animacionPulso.value,
+                      child: CustomPaint(
+                        size: const Size(200, 200),
+                        painter: _CorazonLlenandosePainter(
+                          progreso: _animation.value,
+                        ),
                       ),
                     ),
                   ),

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart' hide ImageSource;
 import 'package:image_picker/image_picker.dart' as picker show ImageSource;
+import 'package:simple_gradient_text/simple_gradient_text.dart';
 
 import '../core/estado_global.dart';
 import '../core/notificaciones.dart';
@@ -20,6 +21,7 @@ import '../widgets/tarjeta_recuerdo.dart';
 import '../widgets/widgets_video.dart';
 import 'carta_screen.dart';
 import 'detalle_album_screen.dart';
+import 'jardin_screen.dart';
 
 /// Lista de canciones empaquetadas como assets. El orden define la lista
 /// de reproducción "en serie"; el modo aleatorio elige al azar.
@@ -69,6 +71,10 @@ class _PantallaGaleriaVintageState extends State<PantallaGaleriaVintage> {
   StreamSubscription<void>? _completionSub;
   VoidCallback? _volumenListener;
 
+  // Control del PageView galería ↔ jardín.
+  final PageController _pageController = PageController();
+  final ValueNotifier<int> _paginaActual = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +107,8 @@ class _PantallaGaleriaVintageState extends State<PantallaGaleriaVintage> {
     _estaReproduciendo.dispose();
     _modoAleatorio.dispose();
     _modoRepetir.dispose();
+    _pageController.dispose();
+    _paginaActual.dispose();
     super.dispose();
   }
 
@@ -353,58 +361,93 @@ class _PantallaGaleriaVintageState extends State<PantallaGaleriaVintage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
+      // PageView horizontal con dos páginas:
+      //  · Página 0: la galería (foto-vinilo + reproductor)
+      //  · Página 1: el Jardín del Amor
+      // Deslizar hacia la izquierda revela el jardín, deslizar hacia la
+      // derecha vuelve a la galería. La música sigue sonando en ambas.
+      body: PageView(
+        controller: _pageController,
+        physics: const ClampingScrollPhysics(),
+        onPageChanged: (i) => _paginaActual.value = i,
         children: [
-          // Fondo de mármol vintage.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/MainBackground.jpg'),
-                fit: BoxFit.cover,
+          _construirGaleria(),
+          const PantallaJardin(),
+        ],
+      ),
+    );
+  }
+
+  /// Construye la página de la galería (background + petalos + contenido).
+  Widget _construirGaleria() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Fondo de mármol vintage.
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/images/MainBackground.jpg'),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        // Capa decorativa: pétalos cayendo en bucle infinito.
+        // Solo en la galería principal — no afecta a otras pantallas.
+        const Positioned.fill(
+          child: PetalosAnimados(densidad: 16),
+        ),
+        // Contenido principal.
+        SafeArea(
+          child: Column(
+            children: [
+              _Encabezado(
+                tiempoRestante: _tiempoRestante,
+                onAnadir: _anadirRecuerdo,
+                onConfigurar: _mostrarConfiguracion,
+                onAbrirCarta: _abrirCarta,
+              ),
+              const Expanded(child: _Galeria()),
+              ValueListenableBuilder<double>(
+                valueListenable: EstadoGlobal.escalaApp,
+                builder: (_, factor, __) => ReproductorRadioVintage(
+                  factorEscala: factor,
+                  indiceCancionNotifier: _indiceCancion,
+                  estaReproduciendoNotifier: _estaReproduciendo,
+                  modoAleatorioNotifier: _modoAleatorio,
+                  modoRepetirNotifier: _modoRepetir,
+                  miMusica: _miMusica,
+                  onPlayPause: _pausarOPlay,
+                  onNext: _siguienteCancion,
+                  onPrevious: _cancionAnterior,
+                  onToggleAleatorio: () =>
+                      _modoAleatorio.value = !_modoAleatorio.value,
+                  onToggleRepetir: () =>
+                      _modoRepetir.value = !_modoRepetir.value,
+                  reproductor: _reproductorGlobal,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Indicador "desliza para ir al jardín" en el borde derecho.
+        // Solo visible mientras la página activa es la 0 (galería).
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: ValueListenableBuilder<int>(
+            valueListenable: _paginaActual,
+            builder: (_, pagina, __) => IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: pagina == 0 ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 350),
+                child: const _IndicadorJardin(),
               ),
             ),
           ),
-          // Capa decorativa: pétalos cayendo en bucle infinito.
-          // Solo en la galería principal — no afecta a otras pantallas.
-          const Positioned.fill(
-            child: PetalosAnimados(densidad: 16),
-          ),
-          // Contenido principal.
-          SafeArea(
-            child: Column(
-              children: [
-                _Encabezado(
-                  tiempoRestante: _tiempoRestante,
-                  onAnadir: _anadirRecuerdo,
-                  onConfigurar: _mostrarConfiguracion,
-                  onAbrirCarta: _abrirCarta,
-                ),
-                const Expanded(child: _Galeria()),
-                ValueListenableBuilder<double>(
-                  valueListenable: EstadoGlobal.escalaApp,
-                  builder: (_, factor, __) => ReproductorRadioVintage(
-                    factorEscala: factor,
-                    indiceCancionNotifier: _indiceCancion,
-                    estaReproduciendoNotifier: _estaReproduciendo,
-                    modoAleatorioNotifier: _modoAleatorio,
-                    modoRepetirNotifier: _modoRepetir,
-                    miMusica: _miMusica,
-                    onPlayPause: _pausarOPlay,
-                    onNext: _siguienteCancion,
-                    onPrevious: _cancionAnterior,
-                    onToggleAleatorio: () =>
-                        _modoAleatorio.value = !_modoAleatorio.value,
-                    onToggleRepetir: () =>
-                        _modoRepetir.value = !_modoRepetir.value,
-                    reproductor: _reproductorGlobal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -531,32 +574,20 @@ class _Encabezado extends StatelessWidget {
       child: Row(
         children: [
           // Logo "ZyN" con gradiente dorado.
-          ShaderMask(
-            shaderCallback: (b) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.oroClaro,
-                AppColors.oro,
-                AppColors.oroBrillante,
-              ],
-              stops: [0.0, 0.55, 1.0],
-            ).createShader(b),
-            child: Text(
-              'ZyN',
+        Container(
+            child: GradientText(
+              'ZyN ',
               style: GoogleFonts.greatVibes(
-                fontSize: 44,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-                height: 1.0,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withOpacity(0.45),
-                    blurRadius: 6,
-                    offset: const Offset(2, 3),
-                  ),
-                ],
-              ),
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ), 
+    colors: [
+        AppColors.oroClaro,
+        const Color.fromARGB(188, 232, 212, 168),
+        const Color.fromARGB(162, 232, 212, 168),
+    ],
+              
             ),
           ),
           // Pastilla con la cuenta regresiva.
@@ -837,5 +868,91 @@ class _Miniatura extends StatelessWidget {
           ),
         );
     }
+  }
+}
+
+/// Indicador discreto en el borde derecho de la galería que invita a
+/// deslizar hacia el Jardín del Amor. Es una pequeña flor de jazmín que
+/// pulsa con suavidad, junto a un filete dorado vertical.
+class _IndicadorJardin extends StatefulWidget {
+  const _IndicadorJardin();
+
+  @override
+  State<_IndicadorJardin> createState() => _IndicadorJardinState();
+}
+
+class _IndicadorJardinState extends State<_IndicadorJardin>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulso;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulso = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulso.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Center(
+        child: AnimatedBuilder(
+          animation: _pulso,
+          builder: (_, __) {
+            // Mueve un par de píxeles hacia la izquierda para sugerir
+            // dirección del swipe ("ven a verme").
+            final offset = -4 - _pulso.value * 6;
+            final opacidadFlor = 0.45 + _pulso.value * 0.35;
+            return Transform.translate(
+              offset: Offset(offset, 0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🌸',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Colors.white.withValues(alpha: opacidadFlor),
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Filete vertical dorado que se desvanece arriba/abajo.
+                  Container(
+                    width: 1.2,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          AppColors.oro.withValues(alpha: 0.7),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

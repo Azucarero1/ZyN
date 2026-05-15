@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/estado_global.dart';
+import '../core/estado_jardin.dart';
 import '../core/notificaciones.dart';
 import '../core/theme.dart';
 import 'galeria_screen.dart';
@@ -92,6 +93,9 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash>
 
   Future<void> _arrancar() async {
     await EstadoGlobal.inicializar();
+    // Registra la apertura del jardín (avanza la racha o marchita el jazmín
+    // si hace días que no entra).
+    await EstadoJardin.registrarApertura();
     _setEstado('Preparando notificaciones…');
     await inicializarNotificaciones();
 

@@ -18,10 +18,18 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code — config personal del IDE, no debe entrar al repo.
+.vscode/
+
+# Carpetas internas / temporales que no deben subirse.
+.claude/
+packages/
+RUN_APP.md
+
+# Notas y backups personales.
+*.bak
+*.orig
+NOTES.md
 
 # Flutter/Dart/Pub related
 **/doc/api/

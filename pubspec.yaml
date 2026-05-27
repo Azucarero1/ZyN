@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.11.0
@@ -41,19 +41,14 @@ dependencies:
   shared_preferences: ^2.5.4
   flutter_local_notifications: ^21.0.0-dev.1
   timezone: ^0.11.0
-  flutter_launcher_icons: ^0.14.4
   video_thumbnail: ^0.5.3
   path_provider: ^2.1.3
+  simple_gradient_text: ^1.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
@@ -74,6 +69,36 @@ flutter:
   assets:
     - assets/images/
     - assets/audio/
+    - assets/fonts/
+
+  fonts:
+    - family: GreatVibes
+      fonts:
+        - asset: assets/fonts/GreatVibes-Regular.ttf
+    - family: CormorantGaramond
+      fonts:
+        - asset: assets/fonts/CormorantGaramond-Light.ttf
+          weight: 300
+        - asset: assets/fonts/CormorantGaramond-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: assets/fonts/CormorantGaramond-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/CormorantGaramond-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/CormorantGaramond-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/CormorantGaramond-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/CormorantGaramond-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/CormorantGaramond-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/CormorantGaramond-Bold.ttf
+          weight: 700
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

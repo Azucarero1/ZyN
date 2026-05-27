@@ -590,44 +590,7 @@ class _Encabezado extends StatelessWidget {
               
             ),
           ),
-          // Pastilla con la cuenta regresiva.
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.granateProfundo.withOpacity(0.8),
-                    Colors.black.withOpacity(0.6),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.oro.withOpacity(0.35),
-                ),
-              ),
-              child: ValueListenableBuilder<String>(
-                valueListenable: tiempoRestante,
-                builder: (_, valor, __) => Text(
-                  valor,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.cormorantGaramond(
-                    color: AppColors.oroClaro,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.4,
-                    height: 1.15,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          const Spacer(),
           _BotonHeader(
             icon: Icons.mail_outline_rounded,
             onPressed: onAbrirCarta,

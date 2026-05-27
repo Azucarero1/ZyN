@@ -97,7 +97,11 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash>
     // si hace días que no entra).
     await EstadoJardin.registrarApertura();
     _setEstado('Preparando notificaciones…');
-    await inicializarNotificaciones();
+    // Notificaciones: se inicializan en background sin bloquear el
+    // splash. Si la usuaria deniega los permisos o el plugin falla,
+    // la app sigue funcionando con normalidad — simplemente no se
+    // entregan las notificaciones.
+    unawaited(_configurarNotificacionesEnBackground());
 
     if (!mounted) return;
     _setEstado('Preparando texturas…');
@@ -131,6 +135,23 @@ class _PantallaCargaSplashState extends State<PantallaCargaSplash>
             FadeTransition(opacity: animacion, child: child),
       ),
     );
+  }
+
+  /// Inicializa y programa las notificaciones SIN bloquear el flujo
+  /// principal. Cualquier error aquí queda silenciado para que la app
+  /// siga arrancando con normalidad aunque la usuaria deniegue permisos.
+  Future<void> _configurarNotificacionesEnBackground() async {
+    try {
+      await inicializarNotificaciones();
+      final partesHora = EstadoJardin.horaNotificacion.split(':');
+      final horaRiego = int.tryParse(partesHora.first) ?? 20;
+      final minRiego = partesHora.length > 1
+          ? (int.tryParse(partesHora[1]) ?? 0)
+          : 0;
+      await programarRiegoDiario(hora: horaRiego, minuto: minRiego);
+    } catch (e) {
+      debugPrint('Error configurando notificaciones (ignorado): $e');
+    }
   }
 
   Future<void> _precargarMiniaturas() async {

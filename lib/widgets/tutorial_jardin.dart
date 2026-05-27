@@ -42,10 +42,15 @@ class TutorialJardin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        child: Container(
+    // Material(transparent) provee el DefaultTextStyle necesario para
+    // que los Text NO muestren la subraya amarilla doble que Flutter
+    // dibuja cuando no hay ancestor Material (típico en diálogos).
+    return Material(
+      type: MaterialType.transparency,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Container(
           constraints: const BoxConstraints(maxWidth: 360),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
           decoration: BoxDecoration(
@@ -198,6 +203,7 @@ class TutorialJardin extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
